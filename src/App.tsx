@@ -11,7 +11,11 @@ import { FreeTonightScreen } from "@/screens/FreeTonightScreen";
 import { HouseholdScreen } from "@/screens/HouseholdScreen";
 import { JoinCircleScreen } from "@/screens/JoinCircleScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
+import { MeetingsScreen } from "@/screens/MeetingsScreen";
+import { NoticesScreen } from "@/screens/NoticesScreen";
+import { PresenceScreen } from "@/screens/PresenceScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
+import { PsetsScreen } from "@/screens/PsetsScreen";
 import { StudyGroupsScreen } from "@/screens/StudyGroupsScreen";
 
 const basename =
@@ -45,6 +49,10 @@ function Gate() {
         <Route path="/circles/:circleId/household" element={<HouseholdScreen />} />
         <Route path="/circles/:circleId/tonight" element={<FreeTonightScreen />} />
         <Route path="/circles/:circleId/study" element={<StudyGroupsScreen />} />
+        <Route path="/circles/:circleId/where" element={<PresenceScreen />} />
+        <Route path="/circles/:circleId/psets" element={<PsetsScreen />} />
+        <Route path="/circles/:circleId/meetings" element={<MeetingsScreen />} />
+        <Route path="/circles/:circleId/notices" element={<NoticesScreen />} />
         <Route path="/events" element={<EventBuddyScreen />} />
         <Route path="/you" element={<ProfileScreen />} />
         <Route path="*" element={<Navigate to="/circles" replace />} />

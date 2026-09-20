@@ -1,7 +1,9 @@
 import type {
   CampusEvent,
   Circle,
+  CircleMeeting,
   CircleMember,
+  CircleNotice,
   CommonRoomBooking,
   DataMode,
   DinnerStatus,
@@ -12,6 +14,12 @@ import type {
   GroceryItem,
   LocalProfile,
   ModuleId,
+  NoticeTag,
+  PlaceKind,
+  PresenceCheckIn,
+  PresenceExpiryOption,
+  Pset,
+  PsetClaim,
   StudyGroup,
   StudyRequest,
   TimeWindow,
@@ -53,6 +61,7 @@ export type CirclesStore = {
   createCircle: (input: CreateCircleInput) => Promise<Circle>;
   joinCircle: (joinCode: string) => Promise<Circle>;
   leaveCircle: (circleId: string) => Promise<void>;
+  setCircleModules: (circleId: string, modulesEnabled: ModuleId[]) => Promise<void>;
   subscribeMembers: (
     circleId: string,
     cb: (members: CircleMember[]) => void,
@@ -133,4 +142,55 @@ export type CirclesStore = {
     }) => void,
   ) => Unsubscribe;
   setBuddyOptIn: (event: CampusEvent, on: boolean) => Promise<EventBuddyMatch | null>;
+
+  subscribePresence: (
+    circleId: string,
+    cb: (rows: PresenceCheckIn[]) => void,
+  ) => Unsubscribe;
+  setPresenceCheckIn: (input: {
+    circleId: string;
+    placeKind: PlaceKind;
+    placeLabel: string;
+    expiry: PresenceExpiryOption;
+  }) => Promise<void>;
+  clearPresenceCheckIn: (circleId: string) => Promise<void>;
+
+  subscribePsets: (
+    circleId: string,
+    cb: (payload: { psets: Pset[]; claims: PsetClaim[] }) => void,
+  ) => Unsubscribe;
+  addPset: (input: {
+    circleId: string;
+    title: string;
+    dueDate: string;
+    note: string;
+  }) => Promise<Pset>;
+  removePset: (psetId: string) => Promise<void>;
+  setPsetClaim: (psetId: string, on: boolean) => Promise<void>;
+
+  subscribeMeetings: (
+    circleId: string,
+    cb: (rows: CircleMeeting[]) => void,
+  ) => Unsubscribe;
+  addMeeting: (input: {
+    circleId: string;
+    name: string;
+    date: string;
+    startTime: string;
+    place: string;
+    note: string;
+  }) => Promise<CircleMeeting>;
+  removeMeeting: (meetingId: string) => Promise<void>;
+
+  subscribeNotices: (
+    circleId: string,
+    cb: (rows: CircleNotice[]) => void,
+  ) => Unsubscribe;
+  addNotice: (input: {
+    circleId: string;
+    body: string;
+    where: string;
+    tag: NoticeTag;
+  }) => Promise<CircleNotice>;
+  removeNotice: (noticeId: string) => Promise<void>;
 };

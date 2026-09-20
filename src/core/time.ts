@@ -39,3 +39,17 @@ export function formatTime(hhmm: string) {
 export function isPastCutoff(cutoffHour: number, now = new Date()) {
   return now.getHours() >= cutoffHour;
 }
+
+export function hoursFromNowISO(hours: number, now = new Date()) {
+  return new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString();
+}
+
+export function formatExpiry(expiresAt: string | null, now = new Date()) {
+  if (!expiresAt) return "until you clear it";
+  const ms = new Date(expiresAt).getTime() - now.getTime();
+  if (ms <= 0) return "expired";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `about ${minutes} min left`;
+  const hours = Math.round(minutes / 60);
+  return `about ${hours} hr left`;
+}

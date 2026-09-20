@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MODULE_COPY } from "@/core/copy";
-import type { CircleType, ModuleId } from "@/core/types";
+import { MODULE_IDS, type CircleType, type ModuleId } from "@/core/types";
 import { useApp } from "@/context/AppContext";
 
 export function CreateCircleScreen() {
@@ -15,12 +15,16 @@ export function CreateCircleScreen() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [type, setType] = useState<CircleType>("household");
-  const [modules, setModules] = useState<ModuleId[]>(["logistics"]);
+  const [modules, setModules] = useState<ModuleId[]>(["logistics", "presence", "meetings", "notices"]);
   const [busy, setBusy] = useState(false);
 
   function setTypeAndDefaults(next: CircleType) {
     setType(next);
-    setModules(next === "household" ? ["logistics"] : ["free_tonight", "study_groups"]);
+    setModules(
+      next === "household"
+        ? ["logistics", "presence", "meetings", "notices"]
+        : ["free_tonight", "study_groups", "presence", "psets", "meetings", "notices"],
+    );
   }
 
   function toggle(moduleId: ModuleId, on: boolean) {
@@ -88,7 +92,7 @@ export function CreateCircleScreen() {
             </fieldset>
             <fieldset className="space-y-3">
               <legend className="text-sm font-medium">Modules</legend>
-              {(Object.keys(MODULE_COPY) as ModuleId[]).map((moduleId) => (
+              {(MODULE_IDS).map((moduleId) => (
                 <label key={moduleId} className="flex items-start gap-3 rounded-xl border p-3">
                   <Checkbox
                     checked={modules.includes(moduleId)}

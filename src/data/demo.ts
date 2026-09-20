@@ -1,14 +1,19 @@
-import { dinnerId, freeTonightId, memberDocId, studyRequestId } from "@/core/ids";
-import { endOfLocalDayISO, localDateISO } from "@/core/time";
+import { dinnerId, freeTonightId, memberDocId, presenceId, psetClaimId, studyRequestId } from "@/core/ids";
+import { addDaysISO, endOfLocalDayISO, hoursFromNowISO, localDateISO } from "@/core/time";
 import type {
   CampusEvent,
   Circle,
+  CircleMeeting,
   CircleMember,
+  CircleNotice,
   CommonRoomBooking,
   DinnerStatus,
   EventBuddyRequest,
   FreeTonightSignal,
   GroceryItem,
+  PresenceCheckIn,
+  Pset,
+  PsetClaim,
   StudyRequest,
   User,
 } from "@/core/types";
@@ -59,7 +64,7 @@ export function buildDemoWorld(you: User) {
     type: "household",
     joinCode: "OAK4US",
     memberIds,
-    modulesEnabled: ["logistics"],
+    modulesEnabled: ["logistics", "presence", "meetings", "notices"],
     createdBy: maya.uid,
     createdAt: now,
     logisticsCutoffHour: 18,
@@ -71,7 +76,7 @@ export function buildDemoWorld(you: User) {
     type: "campus_group",
     joinCode: "ALG006",
     memberIds,
-    modulesEnabled: ["free_tonight", "study_groups"],
+    modulesEnabled: ["free_tonight", "study_groups", "presence", "psets", "meetings", "notices"],
     createdBy: jonah.uid,
     createdAt: now,
     logisticsCutoffHour: 18,
@@ -259,6 +264,140 @@ export function buildDemoWorld(you: User) {
     },
   ];
 
+  const presence: PresenceCheckIn[] = [
+    {
+      id: presenceId(priya.uid, house.id),
+      circleId: house.id,
+      userId: priya.uid,
+      placeKind: "home",
+      placeLabel: "Home",
+      expiresAt: null,
+      createdAt: now,
+    },
+    {
+      id: presenceId(maya.uid, house.id),
+      circleId: house.id,
+      userId: maya.uid,
+      placeKind: "dorm",
+      placeLabel: "Dorm / common room",
+      expiresAt: hoursFromNowISO(4),
+      createdAt: now,
+    },
+    {
+      id: presenceId(jonah.uid, course.id),
+      circleId: course.id,
+      userId: jonah.uid,
+      placeKind: "library",
+      placeLabel: "Library",
+      expiresAt: hoursFromNowISO(2),
+      createdAt: now,
+    },
+    {
+      id: presenceId(maya.uid, course.id),
+      circleId: course.id,
+      userId: maya.uid,
+      placeKind: "dining_hall",
+      placeLabel: "Dining hall",
+      expiresAt: hoursFromNowISO(2),
+      createdAt: now,
+    },
+  ];
+
+  const psets: Pset[] = [
+    {
+      id: "ps-demo-3",
+      circleId: course.id,
+      title: "Pset 3",
+      dueDate: addDaysISO(today, 3),
+      note: "Graph shortest paths. Office hours Thursday.",
+      addedBy: jonah.uid,
+      createdAt: now,
+    },
+    {
+      id: "ps-demo-4",
+      circleId: course.id,
+      title: "Pset 4",
+      dueDate: addDaysISO(today, 10),
+      note: "",
+      addedBy: maya.uid,
+      createdAt: now,
+    },
+  ];
+
+  const psetClaims: PsetClaim[] = [
+    {
+      id: psetClaimId(maya.uid, "ps-demo-3"),
+      psetId: "ps-demo-3",
+      circleId: course.id,
+      userId: maya.uid,
+      createdAt: now,
+    },
+    {
+      id: psetClaimId(jonah.uid, "ps-demo-3"),
+      psetId: "ps-demo-3",
+      circleId: course.id,
+      userId: jonah.uid,
+      createdAt: now,
+    },
+  ];
+
+  const meetings: CircleMeeting[] = [
+    {
+      id: "mt-house-kitchen",
+      circleId: house.id,
+      name: "Kitchen restock run",
+      date: addDaysISO(today, 1),
+      startTime: "18:30",
+      place: "Oak Street kitchen",
+      note: "Optional — only if you're around.",
+      addedBy: priya.uid,
+      createdAt: now,
+    },
+    {
+      id: "mt-oh",
+      circleId: course.id,
+      name: "TA office hours",
+      date: addDaysISO(today, 2),
+      startTime: "16:00",
+      place: "26-168",
+      note: "Bring the graph questions from Pset 3.",
+      addedBy: jonah.uid,
+      createdAt: now,
+    },
+    {
+      id: "mt-chamber",
+      circleId: course.id,
+      name: "Chamber ensemble rehearsal",
+      date: friday,
+      startTime: "17:30",
+      place: "Kresge rehearsal room",
+      note: "",
+      addedBy: maya.uid,
+      createdAt: now,
+    },
+  ];
+
+  const notices: CircleNotice[] = [
+    {
+      id: "nt-bathroom",
+      circleId: house.id,
+      body: "The third-floor bathroom is really dirty — sink is full of hair and the floor is sticky.",
+      where: "3rd floor bathroom",
+      tag: "dirty",
+      postedBy: priya.uid,
+      createdAt: now,
+    },
+    {
+      id: "nt-mice",
+      circleId: house.id,
+      body: "Mice sighting by the stove last night. Traps are in the cabinet if someone wants to set them.",
+      where: "Kitchen",
+      tag: "pest",
+      postedBy: maya.uid,
+      createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+    },
+  ];
+
   return {
     users,
     circles: [house, course],
@@ -270,6 +409,11 @@ export function buildDemoWorld(you: User) {
     studyRequests,
     events,
     buddyRequests,
+    presence,
+    psets,
+    psetClaims,
+    meetings,
+    notices,
   };
 }
 
