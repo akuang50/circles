@@ -1,0 +1,87 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "logistics_status",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "grocery_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "common_room_bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "free_tonight_signals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "study_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "study_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "sessionKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "study_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "sessionKey", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "study_groups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "courseCircleId", "order": "ASCENDING" },
+        { "fieldPath": "memberIds", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "event_buddy_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "event_buddy_matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "userIds", "arrayConfig": "CONTAINS" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

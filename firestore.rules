@@ -1,0 +1,200 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isMember(circleId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/circles/$(circleId))
+        && uid() in get(/databases/$(database)/documents/circles/$(circleId)).data.memberIds;
+    }
+
+    function signalDocId(userId, circleId, date) {
+      return userId + '_' + circleId + '_' + date;
+    }
+
+    function studyDocId(userId, circleId, sessionKey) {
+      return userId + '_' + circleId + '_' + sessionKey;
+    }
+
+    function buddyDocId(userId, eventId) {
+      return userId + '_' + eventId;
+    }
+
+    function hasActiveFreeTonight(circleId, date) {
+      let path = /databases/$(database)/documents/free_tonight_signals/$(signalDocId(uid(), circleId, date));
+      return exists(path)
+        && get(path).data.userId == uid()
+        && get(path).data.circleId == circleId
+        && get(path).data.date == date
+        && get(path).data.expiresAt > request.time;
+    }
+
+    function hasStudyRequest(circleId, sessionKey) {
+      return exists(/databases/$(database)/documents/study_requests/$(studyDocId(uid(), circleId, sessionKey)));
+    }
+
+    function hasBuddyRequest(eventId) {
+      return exists(/databases/$(database)/documents/event_buddy_requests/$(buddyDocId(uid(), eventId)));
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && uid() == userId;
+      allow delete: if false;
+    }
+
+    match /join_codes/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.circleId is string;
+      allow update, delete: if false;
+    }
+
+    match /circles/{circleId} {
+      allow read: if isMember(circleId);
+      allow create: if signedIn()
+        && uid() in request.resource.data.memberIds
+        && request.resource.data.createdBy == uid()
+        && request.resource.data.joinCode is string;
+      allow update: if signedIn() && (
+        (
+          uid() in resource.data.memberIds
+          && request.resource.data.joinCode == resource.data.joinCode
+          && request.resource.data.createdBy == resource.data.createdBy
+        ) || (
+          !(uid() in resource.data.memberIds)
+          && uid() in request.resource.data.memberIds
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
+          && request.resource.data.joinCode == resource.data.joinCode
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.name == resource.data.name
+        )
+      );
+      allow delete: if signedIn() && resource.data.createdBy == uid();
+    }
+
+    match /circle_members/{id} {
+      allow read: if signedIn() && isMember(resource.data.circleId);
+      allow create: if signedIn()
+        && request.resource.data.userId == uid()
+        && request.resource.data.circleId is string;
+      allow delete: if signedIn() && resource.data.userId == uid();
+      allow update: if isMember(resource.data.circleId);
+    }
+
+    match /logistics_status/{id} {
+      allow read: if isMember(resource.data.circleId);
+      allow create, update: if signedIn()
+        && request.resource.data.userId == uid()
+        && isMember(request.resource.data.circleId);
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    match /grocery_items/{id} {
+      allow read: if isMember(resource.data.circleId);
+      allow create: if isMember(request.resource.data.circleId)
+        && request.resource.data.addedBy == uid();
+      allow update, delete: if isMember(resource.data.circleId);
+    }
+
+    match /common_room_bookings/{id} {
+      allow read: if isMember(resource.data.circleId);
+      allow create: if isMember(request.resource.data.circleId)
+        && request.resource.data.bookedBy == uid();
+      allow update, delete: if signedIn()
+        && isMember(resource.data.circleId)
+        && resource.data.bookedBy == uid();
+    }
+
+    // Private until the requester also has an active signal for the same
+    // circle + date. Deterministic IDs make the get() lookup possible.
+    match /free_tonight_signals/{id} {
+      allow read: if signedIn() && (
+        resource.data.userId == uid() ||
+        hasActiveFreeTonight(resource.data.circleId, resource.data.date)
+      );
+      allow create, update: if signedIn()
+        && request.resource.data.userId == uid()
+        && id == signalDocId(uid(), request.resource.data.circleId, request.resource.data.date)
+        && isMember(request.resource.data.circleId);
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    // You may read another request only if you posted one for the same
+    // course circle and session key.
+    match /study_requests/{id} {
+      allow read: if signedIn() && (
+        resource.data.userId == uid() ||
+        hasStudyRequest(resource.data.circleId, resource.data.sessionKey)
+      );
+      allow create, update: if signedIn()
+        && request.resource.data.userId == uid()
+        && id == studyDocId(uid(), request.resource.data.circleId, request.resource.data.sessionKey)
+        && isMember(request.resource.data.circleId);
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    match /study_groups/{id} {
+      allow read: if signedIn() && uid() in resource.data.memberIds;
+      allow create: if signedIn()
+        && uid() in request.resource.data.memberIds
+        && request.resource.data.memberIds.size() >= 2
+        && request.resource.data.memberIds.size() <= 5
+        && exists(/databases/$(database)/documents/study_requests/$(studyDocId(request.resource.data.memberIds[0], request.resource.data.courseCircleId, request.resource.data.sessionKey)))
+        && exists(/databases/$(database)/documents/study_requests/$(studyDocId(request.resource.data.memberIds[1], request.resource.data.courseCircleId, request.resource.data.sessionKey)))
+        && (
+          request.resource.data.memberIds.size() < 3 ||
+          exists(/databases/$(database)/documents/study_requests/$(studyDocId(request.resource.data.memberIds[2], request.resource.data.courseCircleId, request.resource.data.sessionKey)))
+        )
+        && (
+          request.resource.data.memberIds.size() < 4 ||
+          exists(/databases/$(database)/documents/study_requests/$(studyDocId(request.resource.data.memberIds[3], request.resource.data.courseCircleId, request.resource.data.sessionKey)))
+        )
+        && (
+          request.resource.data.memberIds.size() < 5 ||
+          exists(/databases/$(database)/documents/study_requests/$(studyDocId(request.resource.data.memberIds[4], request.resource.data.courseCircleId, request.resource.data.sessionKey)))
+        );
+      allow update: if signedIn() && uid() in resource.data.memberIds;
+      allow delete: if false;
+    }
+
+    match /events/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == uid();
+      allow update, delete: if signedIn() && resource.data.createdBy == uid();
+    }
+
+    match /event_buddy_requests/{id} {
+      allow read: if signedIn() && (
+        resource.data.userId == uid() ||
+        hasBuddyRequest(resource.data.eventId)
+      );
+      allow create, update: if signedIn()
+        && request.resource.data.userId == uid()
+        && id == buddyDocId(uid(), request.resource.data.eventId);
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    match /event_buddy_matches/{id} {
+      allow read: if signedIn() && uid() in resource.data.userIds;
+      allow create: if signedIn()
+        && uid() in request.resource.data.userIds
+        && request.resource.data.userIds.size() >= 2
+        && request.resource.data.userIds.size() <= 3
+        && exists(/databases/$(database)/documents/event_buddy_requests/$(buddyDocId(request.resource.data.userIds[0], request.resource.data.eventId)))
+        && exists(/databases/$(database)/documents/event_buddy_requests/$(buddyDocId(request.resource.data.userIds[1], request.resource.data.eventId)))
+        && (
+          request.resource.data.userIds.size() == 2 ||
+          exists(/databases/$(database)/documents/event_buddy_requests/$(buddyDocId(request.resource.data.userIds[2], request.resource.data.eventId)))
+        );
+      allow update, delete: if false;
+    }
+  }
+}
