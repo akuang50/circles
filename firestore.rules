@@ -196,5 +196,62 @@ service cloud.firestore {
         );
       allow update, delete: if false;
     }
+
+    function presenceDocId(userId, circleId) {
+      return userId + '_' + circleId;
+    }
+
+    function psetClaimDocId(userId, psetId) {
+      return userId + '_' + psetId;
+    }
+
+    // Named-place check-ins, visible to the circle. Not GPS.
+    match /presence_checkins/{id} {
+      allow read: if signedIn() && isMember(resource.data.circleId);
+      allow create, update: if signedIn()
+        && request.resource.data.userId == uid()
+        && id == presenceDocId(uid(), request.resource.data.circleId)
+        && isMember(request.resource.data.circleId);
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    match /psets/{id} {
+      allow read: if signedIn() && isMember(resource.data.circleId);
+      allow create: if signedIn()
+        && request.resource.data.addedBy == uid()
+        && isMember(request.resource.data.circleId);
+      allow update, delete: if signedIn()
+        && resource.data.addedBy == uid()
+        && isMember(resource.data.circleId);
+    }
+
+    match /pset_claims/{id} {
+      allow read: if signedIn() && isMember(resource.data.circleId);
+      allow create, update: if signedIn()
+        && request.resource.data.userId == uid()
+        && id == psetClaimDocId(uid(), request.resource.data.psetId)
+        && isMember(request.resource.data.circleId);
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    match /circle_meetings/{id} {
+      allow read: if signedIn() && isMember(resource.data.circleId);
+      allow create: if signedIn()
+        && request.resource.data.addedBy == uid()
+        && isMember(request.resource.data.circleId);
+      allow update, delete: if signedIn()
+        && resource.data.addedBy == uid()
+        && isMember(resource.data.circleId);
+    }
+
+    match /circle_notices/{id} {
+      allow read: if signedIn() && isMember(resource.data.circleId);
+      allow create: if signedIn()
+        && request.resource.data.postedBy == uid()
+        && isMember(request.resource.data.circleId);
+      allow update, delete: if signedIn()
+        && resource.data.postedBy == uid()
+        && isMember(resource.data.circleId);
+    }
   }
 }

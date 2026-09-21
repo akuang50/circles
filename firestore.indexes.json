@@ -81,6 +81,51 @@
         { "fieldPath": "eventId", "order": "ASCENDING" },
         { "fieldPath": "userIds", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "presence_checkins",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "psets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "dueDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pset_claims",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pset_claims",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "psetId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "circle_meetings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "circle_notices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "circleId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

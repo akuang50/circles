@@ -1,8 +1,33 @@
 export const CIRCLE_TYPES = ["household", "campus_group"] as const;
 export type CircleType = (typeof CIRCLE_TYPES)[number];
 
-export const MODULE_IDS = ["logistics", "free_tonight", "study_groups"] as const;
+export const MODULE_IDS = [
+  "logistics",
+  "free_tonight",
+  "study_groups",
+  "presence",
+  "psets",
+  "meetings",
+  "notices",
+] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
+
+export const PLACE_PRESETS = [
+  "library",
+  "dining_hall",
+  "dorm",
+  "class_building",
+  "home",
+  "out",
+] as const;
+export type PlacePreset = (typeof PLACE_PRESETS)[number];
+export type PlaceKind = PlacePreset | "custom";
+
+export const PRESENCE_EXPIRY_OPTIONS = ["2h", "4h", "until_cleared"] as const;
+export type PresenceExpiryOption = (typeof PRESENCE_EXPIRY_OPTIONS)[number];
+
+export const NOTICE_TAGS = ["dirty", "pest", "broken", "other"] as const;
+export type NoticeTag = (typeof NOTICE_TAGS)[number];
 
 export const MEMBER_ROLES = ["member", "admin"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
@@ -133,6 +158,56 @@ export type EventBuddyMatch = {
   eventId: string;
   userIds: string[];
   meetupNote: string;
+  createdAt: string;
+};
+
+export type PresenceCheckIn = {
+  id: string;
+  circleId: string;
+  userId: string;
+  placeKind: PlaceKind;
+  placeLabel: string;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+export type Pset = {
+  id: string;
+  circleId: string;
+  title: string;
+  dueDate: string;
+  note: string;
+  addedBy: string;
+  createdAt: string;
+};
+
+export type PsetClaim = {
+  id: string;
+  psetId: string;
+  circleId: string;
+  userId: string;
+  createdAt: string;
+};
+
+export type CircleMeeting = {
+  id: string;
+  circleId: string;
+  name: string;
+  date: string;
+  startTime: string;
+  place: string;
+  note: string;
+  addedBy: string;
+  createdAt: string;
+};
+
+export type CircleNotice = {
+  id: string;
+  circleId: string;
+  body: string;
+  where: string;
+  tag: NoticeTag;
+  postedBy: string;
   createdAt: string;
 };
 

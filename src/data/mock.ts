@@ -1,3 +1,4 @@
+import { expiryFromOption } from "@/core/boards";
 import {
   buddyRequestId,
   dinnerId,
@@ -5,6 +6,8 @@ import {
   makeJoinCode,
   memberDocId,
   newId,
+  presenceId,
+  psetClaimId,
   sessionKey,
   studyRequestId,
 } from "@/core/ids";
@@ -19,7 +22,9 @@ import { endOfLocalDayISO } from "@/core/time";
 import type {
   CampusEvent,
   Circle,
+  CircleMeeting,
   CircleMember,
+  CircleNotice,
   CommonRoomBooking,
   DinnerStatus,
   EventBuddyMatch,
@@ -27,6 +32,9 @@ import type {
   FreeTonightSignal,
   GroceryItem,
   LocalProfile,
+  PresenceCheckIn,
+  Pset,
+  PsetClaim,
   StudyGroup,
   StudyRequest,
   User,
@@ -51,6 +59,11 @@ type DB = {
   events: Record<string, CampusEvent>;
   buddyRequests: Record<string, EventBuddyRequest>;
   buddyMatches: Record<string, EventBuddyMatch>;
+  presence: Record<string, PresenceCheckIn>;
+  psets: Record<string, Pset>;
+  psetClaims: Record<string, PsetClaim>;
+  meetings: Record<string, CircleMeeting>;
+  notices: Record<string, CircleNotice>;
 };
 
 function emptyDb(): DB {
@@ -68,6 +81,11 @@ function emptyDb(): DB {
     events: {},
     buddyRequests: {},
     buddyMatches: {},
+    presence: {},
+    psets: {},
+    psetClaims: {},
+    meetings: {},
+    notices: {},
   };
 }
 
@@ -261,6 +279,15 @@ export function createMockStore(): CirclesStore {
       notify();
     },
 
+    setCircleModules: async (circleId, modulesEnabled) => {
+      const user = current();
+      assertMember(circleId, user.uid);
+      const circle = db.circles[circleId];
+      if (!circle) throw new Error("That circle is gone.");
+      circle.modulesEnabled = modulesEnabled;
+      notify();
+    },
+
     subscribeMembers: (circleId, cb) =>
       listen(() => {
         cb(
@@ -301,6 +328,11 @@ export function createMockStore(): CirclesStore {
       for (const row of world.studyRequests) db.studyRequests[row.id] = row;
       for (const row of world.events) db.events[row.id] = row;
       for (const row of world.buddyRequests) db.buddyRequests[row.id] = row;
+      for (const row of world.presence) db.presence[row.id] = row;
+      for (const row of world.psets) db.psets[row.id] = row;
+      for (const row of world.psetClaims) db.psetClaims[row.id] = row;
+      for (const row of world.meetings) db.meetings[row.id] = row;
+      for (const row of world.notices) db.notices[row.id] = row;
       notify();
     },
 
@@ -654,6 +686,191 @@ export function createMockStore(): CirclesStore {
       }
       notify();
       return created;
+    },
+
+    subscribePresence: (circleId, cb) =>
+      listen(() => {
+        cb(
+          Object.values(db.presence).filter((row) => row.circleId === circleId),
+        );
+      }),
+
+    setPresenceCheckIn: async (input) => {
+      const user = current();
+      assertMember(input.circleId, user.uid);
+      const label = input.placeLabel.trim();
+      if (!label) throw new Error("Name the place you're checking into.");
+      const id = presenceId(user.uid, input.circleId);
+      const createdAt = new Date().toISOString();
+      db.presence[id] = {
+        id,
+        circleId: input.circleId,
+        userId: user.uid,
+        placeKind: input.placeKind,
+        placeLabel: label,
+        expiresAt: expiryFromOption(input.expiry),
+        createdAt,
+      };
+      notify();
+    },
+
+    clearPresenceCheckIn: async (circleId) => {
+      const user = current();
+      assertMember(circleId, user.uid);
+      delete db.presence[presenceId(user.uid, circleId)];
+      notify();
+    },
+
+    subscribePsets: (circleId, cb) =>
+      listen(() => {
+        cb({
+          psets: Object.values(db.psets)
+            .filter((row) => row.circleId === circleId)
+            .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+          claims: Object.values(db.psetClaims).filter(
+            (row) => row.circleId === circleId,
+          ),
+        });
+      }),
+
+    addPset: async (input) => {
+      const user = current();
+      assertMember(input.circleId, user.uid);
+      const title = input.title.trim();
+      if (!title) throw new Error("Give the pset a short name, like Pset 3.");
+      if (!input.dueDate) throw new Error("Add a due date.");
+      const pset: Pset = {
+        id: newId("ps"),
+        circleId: input.circleId,
+        title,
+        dueDate: input.dueDate,
+        note: input.note.trim(),
+        addedBy: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      db.psets[pset.id] = pset;
+      notify();
+      return pset;
+    },
+
+    removePset: async (psetId) => {
+      const user = current();
+      const pset = db.psets[psetId];
+      if (!pset) return;
+      assertMember(pset.circleId, user.uid);
+      if (pset.addedBy !== user.uid) {
+        throw new Error("Only the person who added it can remove it.");
+      }
+      delete db.psets[psetId];
+      for (const claim of Object.values(db.psetClaims)) {
+        if (claim.psetId === psetId) delete db.psetClaims[claim.id];
+      }
+      notify();
+    },
+
+    setPsetClaim: async (psetId, on) => {
+      const user = current();
+      const pset = db.psets[psetId];
+      if (!pset) throw new Error("That pset isn't on the board.");
+      assertMember(pset.circleId, user.uid);
+      const id = psetClaimId(user.uid, psetId);
+      if (on) {
+        db.psetClaims[id] = {
+          id,
+          psetId,
+          circleId: pset.circleId,
+          userId: user.uid,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        delete db.psetClaims[id];
+      }
+      notify();
+    },
+
+    subscribeMeetings: (circleId, cb) =>
+      listen(() => {
+        cb(
+          Object.values(db.meetings)
+            .filter((row) => row.circleId === circleId)
+            .sort((a, b) =>
+              `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`),
+            ),
+        );
+      }),
+
+    addMeeting: async (input) => {
+      const user = current();
+      assertMember(input.circleId, user.uid);
+      const name = input.name.trim();
+      if (!name) throw new Error("Name the meeting or club.");
+      if (!input.date) throw new Error("Add a day.");
+      const meeting: CircleMeeting = {
+        id: newId("mt"),
+        circleId: input.circleId,
+        name,
+        date: input.date,
+        startTime: input.startTime,
+        place: input.place.trim(),
+        note: input.note.trim(),
+        addedBy: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      db.meetings[meeting.id] = meeting;
+      notify();
+      return meeting;
+    },
+
+    removeMeeting: async (meetingId) => {
+      const user = current();
+      const meeting = db.meetings[meetingId];
+      if (!meeting) return;
+      assertMember(meeting.circleId, user.uid);
+      if (meeting.addedBy !== user.uid) {
+        throw new Error("Only the person who listed it can take it down.");
+      }
+      delete db.meetings[meetingId];
+      notify();
+    },
+
+    subscribeNotices: (circleId, cb) =>
+      listen(() => {
+        cb(
+          Object.values(db.notices)
+            .filter((row) => row.circleId === circleId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        );
+      }),
+
+    addNotice: async (input) => {
+      const user = current();
+      assertMember(input.circleId, user.uid);
+      const body = input.body.trim();
+      if (!body) throw new Error("Say what you saw.");
+      const notice: CircleNotice = {
+        id: newId("nt"),
+        circleId: input.circleId,
+        body,
+        where: input.where.trim(),
+        tag: input.tag,
+        postedBy: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      db.notices[notice.id] = notice;
+      notify();
+      return notice;
+    },
+
+    removeNotice: async (noticeId) => {
+      const user = current();
+      const notice = db.notices[noticeId];
+      if (!notice) return;
+      assertMember(notice.circleId, user.uid);
+      if (notice.postedBy !== user.uid) {
+        throw new Error("Only the person who posted it can take it down.");
+      }
+      delete db.notices[noticeId];
+      notify();
     },
   };
 

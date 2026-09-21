@@ -34,21 +34,20 @@ import {
   freeTonightId,
   makeJoinCode,
   memberDocId,
+  presenceId,
+  psetClaimId,
   sessionKey,
   studyRequestId,
 } from "@/core/ids";
-import {
-  chunkMatches,
-  clusterByOverlap,
-  hasActiveOptIn,
-  meetupNote,
-  visibleMutualSignals,
-} from "@/core/matching";
+import { expiryFromOption } from "@/core/boards";
+import { chunkMatches, clusterByOverlap, hasActiveOptIn, meetupNote, visibleMutualSignals } from "@/core/matching";
 import { endOfLocalDayISO } from "@/core/time";
 import type {
   CampusEvent,
   Circle,
+  CircleMeeting,
   CircleMember,
+  CircleNotice,
   CommonRoomBooking,
   DinnerStatus,
   EventBuddyMatch,
@@ -56,11 +55,17 @@ import type {
   FreeTonightSignal,
   GroceryItem,
   ModuleId,
+  NoticeTag,
+  PlaceKind,
+  PresenceCheckIn,
+  Pset,
+  PsetClaim,
   StudyGroup,
   StudyRequest,
   TimeWindow,
   User,
 } from "@/core/types";
+import { MODULE_IDS, NOTICE_TAGS, PLACE_PRESETS } from "@/core/types";
 import { firebaseConfig } from "./config";
 import type { CirclesStore, Unsubscribe } from "./store";
 
@@ -95,7 +100,9 @@ function circleFrom(id: string, data: Record<string, unknown>): Circle {
     type: data.type === "campus_group" ? "campus_group" : "household",
     joinCode: String(data.joinCode ?? ""),
     memberIds: asStringArray(data.memberIds),
-    modulesEnabled: asStringArray(data.modulesEnabled) as ModuleId[],
+    modulesEnabled: asStringArray(data.modulesEnabled).filter((id): id is ModuleId =>
+      (MODULE_IDS as readonly string[]).includes(id),
+    ),
     createdBy: String(data.createdBy ?? ""),
     createdAt: iso(data.createdAt),
     logisticsCutoffHour: Number(data.logisticsCutoffHour ?? 18),
@@ -267,6 +274,10 @@ export function createFirebaseStore(): CirclesStore {
       const circleRef = doc(db, "circles", circleId);
       await updateDoc(circleRef, { memberIds: arrayRemove(user.uid) });
       await deleteDoc(doc(db, "circle_members", memberDocId(circleId, user.uid)));
+    },
+
+    setCircleModules: async (circleId, modulesEnabled) => {
+      await updateDoc(doc(db, "circles", circleId), { modulesEnabled });
     },
 
     subscribeMembers: (circleId, cb) => {
@@ -775,6 +786,209 @@ export function createFirebaseStore(): CirclesStore {
       }
       return created;
     },
+
+    subscribePresence: (circleId, cb) => {
+      const q = query(
+        collection(db, "presence_checkins"),
+        where("circleId", "==", circleId),
+      );
+      return onSnapshot(q, (snap) => {
+        cb(snap.docs.map((row) => presenceFrom(row.id, row.data() as Record<string, unknown>)));
+      });
+    },
+
+    setPresenceCheckIn: async (input) => {
+      const user = requireUser();
+      const label = input.placeLabel.trim();
+      if (!label) throw new Error("Name the place you're checking into.");
+      const id = presenceId(user.uid, input.circleId);
+      const createdAt = new Date().toISOString();
+      const expiresAt = expiryFromOption(input.expiry);
+      await setDoc(doc(db, "presence_checkins", id), {
+        id,
+        circleId: input.circleId,
+        userId: user.uid,
+        placeKind: input.placeKind,
+        placeLabel: label,
+        expiresAt: expiresAt ? stamp(expiresAt) : null,
+        createdAt: stamp(createdAt),
+      });
+    },
+
+    clearPresenceCheckIn: async (circleId) => {
+      const user = requireUser();
+      await deleteDoc(doc(db, "presence_checkins", presenceId(user.uid, circleId)));
+    },
+
+    subscribePsets: (circleId, cb) => {
+      const psetQuery = query(
+        collection(db, "psets"),
+        where("circleId", "==", circleId),
+      );
+      const claimQuery = query(
+        collection(db, "pset_claims"),
+        where("circleId", "==", circleId),
+      );
+      let psets: Pset[] = [];
+      let claims: PsetClaim[] = [];
+      const publish = () =>
+        cb({
+          psets: [...psets].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+          claims,
+        });
+      const unsubPsets = onSnapshot(psetQuery, (snap) => {
+        psets = snap.docs.map((row) => psetFrom(row.id, row.data() as Record<string, unknown>));
+        publish();
+      });
+      const unsubClaims = onSnapshot(claimQuery, (snap) => {
+        claims = snap.docs.map((row) =>
+          psetClaimFrom(row.id, row.data() as Record<string, unknown>),
+        );
+        publish();
+      });
+      return () => {
+        unsubPsets();
+        unsubClaims();
+      };
+    },
+
+    addPset: async (input) => {
+      const user = requireUser();
+      const title = input.title.trim();
+      if (!title) throw new Error("Give the pset a short name, like Pset 3.");
+      if (!input.dueDate) throw new Error("Add a due date.");
+      const ref = doc(collection(db, "psets"));
+      const pset: Pset = {
+        id: ref.id,
+        circleId: input.circleId,
+        title,
+        dueDate: input.dueDate,
+        note: input.note.trim(),
+        addedBy: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(ref, { ...pset, createdAt: stamp(pset.createdAt) });
+      return pset;
+    },
+
+    removePset: async (psetId) => {
+      const user = requireUser();
+      const ref = doc(db, "psets", psetId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      if (String(snap.data().addedBy) !== user.uid) {
+        throw new Error("Only the person who added it can remove it.");
+      }
+      const claims = await getDocs(
+        query(collection(db, "pset_claims"), where("psetId", "==", psetId)),
+      );
+      await Promise.all(claims.docs.map((row) => deleteDoc(row.ref)));
+      await deleteDoc(ref);
+    },
+
+    setPsetClaim: async (psetId, on) => {
+      const user = requireUser();
+      const psetSnap = await getDoc(doc(db, "psets", psetId));
+      if (!psetSnap.exists()) throw new Error("That pset isn't on the board.");
+      const id = psetClaimId(user.uid, psetId);
+      const ref = doc(db, "pset_claims", id);
+      if (!on) {
+        await deleteDoc(ref);
+        return;
+      }
+      await setDoc(ref, {
+        id,
+        psetId,
+        circleId: String(psetSnap.data().circleId),
+        userId: user.uid,
+        createdAt: stamp(new Date().toISOString()),
+      });
+    },
+
+    subscribeMeetings: (circleId, cb) => {
+      const q = query(collection(db, "circle_meetings"), where("circleId", "==", circleId));
+      return onSnapshot(q, (snap) => {
+        cb(
+          snap.docs
+            .map((row) => meetingFrom(row.id, row.data() as Record<string, unknown>))
+            .sort((a, b) =>
+              `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`),
+            ),
+        );
+      });
+    },
+
+    addMeeting: async (input) => {
+      const user = requireUser();
+      const name = input.name.trim();
+      if (!name) throw new Error("Name the meeting or club.");
+      if (!input.date) throw new Error("Add a day.");
+      const ref = doc(collection(db, "circle_meetings"));
+      const meeting: CircleMeeting = {
+        id: ref.id,
+        circleId: input.circleId,
+        name,
+        date: input.date,
+        startTime: input.startTime,
+        place: input.place.trim(),
+        note: input.note.trim(),
+        addedBy: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(ref, { ...meeting, createdAt: stamp(meeting.createdAt) });
+      return meeting;
+    },
+
+    removeMeeting: async (meetingId) => {
+      const user = requireUser();
+      const ref = doc(db, "circle_meetings", meetingId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      if (String(snap.data().addedBy) !== user.uid) {
+        throw new Error("Only the person who listed it can take it down.");
+      }
+      await deleteDoc(ref);
+    },
+
+    subscribeNotices: (circleId, cb) => {
+      const q = query(collection(db, "circle_notices"), where("circleId", "==", circleId));
+      return onSnapshot(q, (snap) => {
+        cb(
+          snap.docs
+            .map((row) => noticeFrom(row.id, row.data() as Record<string, unknown>))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        );
+      });
+    },
+
+    addNotice: async (input) => {
+      const user = requireUser();
+      const body = input.body.trim();
+      if (!body) throw new Error("Say what you saw.");
+      const ref = doc(collection(db, "circle_notices"));
+      const notice: CircleNotice = {
+        id: ref.id,
+        circleId: input.circleId,
+        body,
+        where: input.where.trim(),
+        tag: input.tag,
+        postedBy: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(ref, { ...notice, createdAt: stamp(notice.createdAt) });
+      return notice;
+    },
+
+    removeNotice: async (noticeId) => {
+      const user = requireUser();
+      const ref = doc(db, "circle_notices", noticeId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      if (String(snap.data().postedBy) !== user.uid) {
+        throw new Error("Only the person who posted it can take it down.");
+      }
+      await deleteDoc(ref);
+    },
   };
 
   return store;
@@ -849,6 +1063,72 @@ function matchFrom(id: string, data: Record<string, unknown>): EventBuddyMatch {
     eventId: String(data.eventId),
     userIds: asStringArray(data.userIds),
     meetupNote: String(data.meetupNote ?? ""),
+    createdAt: iso(data.createdAt),
+  };
+}
+
+function presenceFrom(id: string, data: Record<string, unknown>): PresenceCheckIn {
+  const kind = String(data.placeKind);
+  const placeKind: PlaceKind =
+    kind === "custom" || (PLACE_PRESETS as readonly string[]).includes(kind)
+      ? (kind as PlaceKind)
+      : "custom";
+  return {
+    id,
+    circleId: String(data.circleId),
+    userId: String(data.userId),
+    placeKind,
+    placeLabel: String(data.placeLabel ?? ""),
+    expiresAt: data.expiresAt == null ? null : iso(data.expiresAt),
+    createdAt: iso(data.createdAt),
+  };
+}
+
+function psetFrom(id: string, data: Record<string, unknown>): Pset {
+  return {
+    id,
+    circleId: String(data.circleId),
+    title: String(data.title ?? ""),
+    dueDate: String(data.dueDate ?? ""),
+    note: String(data.note ?? ""),
+    addedBy: String(data.addedBy ?? ""),
+    createdAt: iso(data.createdAt),
+  };
+}
+
+function psetClaimFrom(id: string, data: Record<string, unknown>): PsetClaim {
+  return {
+    id,
+    psetId: String(data.psetId),
+    circleId: String(data.circleId),
+    userId: String(data.userId),
+    createdAt: iso(data.createdAt),
+  };
+}
+
+function meetingFrom(id: string, data: Record<string, unknown>): CircleMeeting {
+  return {
+    id,
+    circleId: String(data.circleId),
+    name: String(data.name ?? ""),
+    date: String(data.date ?? ""),
+    startTime: String(data.startTime ?? ""),
+    place: String(data.place ?? ""),
+    note: String(data.note ?? ""),
+    addedBy: String(data.addedBy ?? ""),
+    createdAt: iso(data.createdAt),
+  };
+}
+
+function noticeFrom(id: string, data: Record<string, unknown>): CircleNotice {
+  const tag = String(data.tag);
+  return {
+    id,
+    circleId: String(data.circleId),
+    body: String(data.body ?? ""),
+    where: String(data.where ?? ""),
+    tag: (NOTICE_TAGS as readonly string[]).includes(tag) ? (tag as NoticeTag) : "other",
+    postedBy: String(data.postedBy ?? ""),
     createdAt: iso(data.createdAt),
   };
 }

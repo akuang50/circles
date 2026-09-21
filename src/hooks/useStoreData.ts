@@ -2,13 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   CampusEvent,
   Circle,
+  CircleMeeting,
   CircleMember,
+  CircleNotice,
   CommonRoomBooking,
   DinnerStatus,
   EventBuddyMatch,
   EventBuddyRequest,
   FreeTonightSignal,
   GroceryItem,
+  PresenceCheckIn,
+  Pset,
+  PsetClaim,
   StudyGroup,
   StudyRequest,
   User,
@@ -119,6 +124,45 @@ export function useBuddy(store: CirclesStore, eventId: string | undefined) {
     return store.subscribeBuddy(eventId, setPayload);
   }, [store, eventId]);
   return payload;
+}
+
+export function usePresence(store: CirclesStore, circleId: string | undefined) {
+  const [rows, setRows] = useState<PresenceCheckIn[] | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    return store.subscribePresence(circleId, setRows);
+  }, [store, circleId]);
+  return rows;
+}
+
+export function usePsets(store: CirclesStore, circleId: string | undefined) {
+  const [payload, setPayload] = useState<{
+    psets: Pset[];
+    claims: PsetClaim[];
+  } | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    return store.subscribePsets(circleId, setPayload);
+  }, [store, circleId]);
+  return payload;
+}
+
+export function useMeetings(store: CirclesStore, circleId: string | undefined) {
+  const [rows, setRows] = useState<CircleMeeting[] | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    return store.subscribeMeetings(circleId, setRows);
+  }, [store, circleId]);
+  return rows;
+}
+
+export function useNotices(store: CirclesStore, circleId: string | undefined) {
+  const [rows, setRows] = useState<CircleNotice[] | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    return store.subscribeNotices(circleId, setRows);
+  }, [store, circleId]);
+  return rows;
 }
 
 export function useCircle(

@@ -22,6 +22,14 @@ export function dinnerId(circleId: string, date: string, userId: string) {
   return `${circleId}_${date}_${userId}`;
 }
 
+export function presenceId(userId: string, circleId: string) {
+  return `${userId}_${circleId}`;
+}
+
+export function psetClaimId(userId: string, psetId: string) {
+  return `${userId}_${psetId}`;
+}
+
 export function sessionKey(label: string) {
   const key = label
     .trim()
